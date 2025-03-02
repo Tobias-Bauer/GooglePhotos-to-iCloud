@@ -128,11 +128,15 @@ def add_content_identifier_to_mp4(filepath, asset_id):
     
     return export_session.error().description() if export_session.error() else None
 
-def add_content_identifier_to_img(image_path, new_id, reference_file="q.JPG"):
+def add_content_identifier_to_img(image_path, new_id, reference_file="reference.JPG"):
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # Get script directory
+    reference_path = os.path.join(script_dir, reference_file)  # Absolute path to reference file
+
+
     print(f"Adding content identifier to {image_path}")
     if not os.path.exists(image_path):
         return
-    subprocess.run(["exiftool", "-tagsfromfile", reference_file, "-MakerNotes", image_path], check=True)
+    subprocess.run(["exiftool", "-tagsfromfile", reference_path, "-MakerNotes", image_path], check=True)
     subprocess.run(["exiftool", f"-ContentIdentifier={new_id}", image_path], check=True)
 
 def update_makernotes_and_content_id(folder_path, files):
@@ -151,10 +155,11 @@ def update_makernotes_and_content_id(folder_path, files):
             add_photo_to_icloud(file_path)
             continue
         
+        if os.path.exists(video_path):
+            os.rename(video_path, mp4_path)
+
         new_id = str(uuid.uuid4()).upper()
         add_content_identifier_to_img(file_path, new_id)
-        if os.path.exists(video_path):
-            mp4_path = video_path
         add_content_identifier_to_mp4(mp4_path, new_id)
         add_live_photo_to_icloud(file_path, mp4_path)
         
@@ -183,12 +188,17 @@ def replace_photo_if_exists(folder_path, check_library):
     
     for filename in os.listdir(folder_path):
         if filename.lower().endswith(".mp4"):
-            add_photo_to_album(filename, "Duplicates in Library")
-            add_photo_to_icloud(os.path.join(folder_path, filename))
-            if "found, liked: true" in photo_exists_in_icloud(filename):
+            liked = photo_exists_in_icloud(filename)
+            if liked == "found, liked: true":
+                add_photo_to_album(filename, "Duplicates in Library")
+                add_photo_to_icloud(os.path.join(folder_path, filename))
                 add_photo_to_album(filename, "Favorite")
-            else:
+            elif liked == "not found":
+                add_photo_to_icloud(os.path.join(folder_path, filename))
                 add_photo_to_album(filename, "New and Duplicates")
+            else:
+                add_photo_to_album(filename, "Duplicates in Library")
+                add_photo_to_icloud(os.path.join(folder_path, filename))
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or len(sys.argv) > 3:
